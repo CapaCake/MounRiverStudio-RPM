@@ -1,0 +1,61 @@
+name: Build and Release RPM Package
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up build environment
+      run: |
+        sudo apt update   
+        sudo apt install -y rpm build-essential curl
+
+
+    - name: Extract version from tag
+      id: extract-version
+      run: |
+        VERSION="${GITHUB_REF_NAME#v}"
+        echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+    - name: Run build script
+      run: |
+        chmod +x ./build.sh
+        ./build.sh
+
+    - name: Prepare Release Asset
+      id: prepare-asset
+      run: |
+        SOURCE_PATH=$(find $HOME/rpmbuild/RPMS/x86_64 -name "MounRiverStudio-${{ env.VERSION }}-*.rpm")
+        
+        if [ -z "$SOURCE_PATH" ]; then
+          echo "::error::RPM file not found after build!"
+          exit 1
+        fi
+        
+        DESIRED_NAME="MounRiverStudio_Linux_X64_V${{ env.VERSION }}.rpm"
+        echo "Moving '$SOURCE_PATH' to './$DESIRED_NAME'"
+        mv "$SOURCE_PATH" "./$DESIRED_NAME"
+        echo "ASSET_PATH=./$DESIRED_NAME" >> $GITHUB_ENV
+
+
+    - name: Create Release and Upload RPM Package
+      uses: softprops/action-gh-release@v2
+      with:
+        files: ${{ env.ASSET_PATH }}
+        tag_name: ${{ github.ref_name }}
+        name: "MounRiverStudio_Linux_X64_V${{ env.VERSION }}" 
+        draft: false
+        body: "MounRiverStudio_Linux_X64_V${{ env.VERSION }}" 
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
